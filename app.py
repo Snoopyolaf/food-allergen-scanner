@@ -43,14 +43,14 @@ st.sidebar.write("---")
 st.sidebar.write(f"Scans used: {st.session_state.call_count}/{MAX_CALLS}")
 
 # Main upload area
-photo = st.file_uploader("Upload a food photo", type=["jpg", "jpeg", "png"])
+photo = st.file_uploader("Upload a food photo", type=["jpg", "jpeg", "png", "webp"])
 
 if photo is not None:
     st.image(photo, caption="Your food", width=400)
 
     if len(selected_allergens) == 0:
         st.warning("Please select at least one allergen to check for.")
-    elif st.button("🔍 Scan for Allergens", type="primary"):
+    elif st.button("Scan for Allergens", type="primary"):
         if st.session_state.call_count >= MAX_CALLS:
             st.error("Scan limit reached. Please restart the app.")
         else:
