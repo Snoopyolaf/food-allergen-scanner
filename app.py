@@ -8,10 +8,10 @@ st.set_page_config(page_title="Food Allergen Scanner", page_icon="🔍")
 
 # Title and description
 st.title("🔍 Food Allergen Scanner")
-st.write("Upload a photo of any food and AI will detect potential allergens instantly.")
+st.write("Upload a photo of any food and AI will analyze the food to detect potential allergens.")
 
 # Disclaimer
-st.info("⚠️ This tool is AI-powered and may not be 100% accurate. Always verify allergens with product packaging or a medical professional.")
+st.info("⚠️ This tool is AI-powered and may not be 100% accurate. Make sure to verify allergens with product packaging or a medical professional.")
 
 # Sidebar - custom allergen list
 st.sidebar.title("🥜 My Allergens")
@@ -51,7 +51,7 @@ if photo is not None:
 
     if len(selected_allergens) == 0:
         st.warning("Please select at least one allergen to check for.")
-    elif st.button("🔍 Scan for Allergens", type="primary"):
+    elif st.button("Scan for Allergens", type="primary"):
         if st.session_state.call_count >= MAX_CALLS:
             st.error("Scan limit reached. Please restart the app.")
         else:
@@ -60,7 +60,7 @@ if photo is not None:
                 image_data = base64.standard_b64encode(photo.read()).decode("utf-8")
 
                 client = anthropic.Anthropic(
-                    api_key=os.environ.get("ANTHROPIC_API_KEY")
+                    api_key=st.secrets["ANTHROPIC_API_KEY"]
                 )
 
                 message = client.messages.create(
