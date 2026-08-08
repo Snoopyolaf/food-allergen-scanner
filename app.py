@@ -1,14 +1,13 @@
 import streamlit as st
 import anthropic
-import os
 import base64
 
 # Page config
 st.set_page_config(page_title="Food Allergen Scanner", page_icon="🔍")
 
 # Title and description
-st.title("🔍 Food Allergen Scanner")
-st.write("Upload a photo of any food and AI will analyze the food to detect potential allergens.")
+st.title("Food Allergen Scanner")
+st.write("Upload a photo of any food and AI will detect potential allergens instantly.")
 
 # Disclaimer
 st.info("⚠️ This tool is AI-powered and may not be 100% accurate. Make sure to verify allergens with product packaging or a medical professional.")
@@ -51,17 +50,15 @@ if photo is not None:
 
     if len(selected_allergens) == 0:
         st.warning("Please select at least one allergen to check for.")
-    elif st.button("Scan for Allergens", type="primary"):
+    elif st.button("🔍 Scan for Allergens", type="primary"):
         if st.session_state.call_count >= MAX_CALLS:
             st.error("Scan limit reached. Please restart the app.")
         else:
             with st.spinner("Analyzing your food..."):
                 photo.seek(0)
-image_bytes = photo.read()
-image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
-
-# Detect correct media type
-file_type = photo.type  # e.g. "image/jpeg" or "image/png"
+                image_bytes = photo.read()
+                image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
+                file_type = photo.type
 
                 client = anthropic.Anthropic(
                     api_key=st.secrets["ANTHROPIC_API_KEY"]
