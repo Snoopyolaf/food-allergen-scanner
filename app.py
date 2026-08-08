@@ -57,7 +57,11 @@ if photo is not None:
         else:
             with st.spinner("Analyzing your food..."):
                 photo.seek(0)
-                image_data = base64.standard_b64encode(photo.read()).decode("utf-8")
+image_bytes = photo.read()
+image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+# Detect correct media type
+file_type = photo.type  # e.g. "image/jpeg" or "image/png"
 
                 client = anthropic.Anthropic(
                     api_key=st.secrets["ANTHROPIC_API_KEY"]
@@ -73,7 +77,7 @@ if photo is not None:
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
-                                    "media_type": "image/jpeg",
+                                    "media_type": file_type,
                                     "data": image_data,
                                 },
                             },
