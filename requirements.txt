@@ -1,3 +1,6 @@
 anthropic
 streamlit
 Pillow
+requests
+numpy
+zxing-cpp

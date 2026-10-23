@@ -1,111 +1,102 @@
-import streamlit as st
 import anthropic
-import base64
+import streamlit as st
 from PIL import Image
-import io
 
-# Page config
+from allergens import ALLERGENS, check_product
+from barcode_scan import lookup_product, read_barcode
+from photo_scan import scan_photo
+
+MAX_PHOTO_SCANS = 20
+
 st.set_page_config(page_title="Food Allergen Scanner", page_icon="🔍")
-
-# Title and description
 st.title("🔍 Food Allergen Scanner")
-st.write("Upload a photo of any food and AI will detect potential allergens instantly.")
+st.write("Check a meal photo or a packaged food's barcode for allergens.")
+st.info("⚠️ AI and database results can be wrong or incomplete. Always check the package label, and ask staff when eating out.")
 
-# Disclaimer
-st.info("⚠️ This tool is AI-powered and may not be 100% accurate. Always verify allergens with product packaging or a medical professional.")
-
-# Sidebar - custom allergen list
+# ---------- Sidebar: allergen profile ----------
 st.sidebar.title("🥜 My Allergens")
-st.sidebar.write("Select the allergens you want to check for:")
+selected = [a for a in ALLERGENS if st.sidebar.checkbox(a, value=True)]
 
-allergen_options = {
-    "Peanuts": True,
-    "Tree Nuts": True,
-    "Dairy": True,
-    "Eggs": True,
-    "Wheat/Gluten": True,
-    "Soy": True,
-    "Shellfish": True,
-    "Fish": True,
-    "Sesame": True,
-}
+if "scan_count" not in st.session_state:
+    st.session_state.scan_count = 0
+st.sidebar.divider()
+st.sidebar.caption(f"Photo scans used: {st.session_state.scan_count}/{MAX_PHOTO_SCANS}")
 
-selected_allergens = []
-for allergen, default in allergen_options.items():
-    if st.sidebar.checkbox(allergen, value=default):
-        selected_allergens.append(allergen)
 
-# Call limit guardrail
-if "call_count" not in st.session_state:
-    st.session_state.call_count = 0
+def show_product_results(product, selected):
+    name = product.get("product_name") or "Unknown product"
+    brand = product.get("brands")
+    st.subheader(f"{name} ({brand})" if brand else name)
 
-MAX_CALLS = 20
+    if not (product.get("ingredients_text") or product.get("allergens_tags")):
+        st.warning("This product has no ingredient or allergen data in the database. Check the package label directly.")
+        return
 
-st.sidebar.write("---")
-st.sidebar.write(f"Scans used: {st.session_state.call_count}/{MAX_CALLS}")
-
-# Main upload area
-photo = st.file_uploader("Upload a food photo", type=["jpg", "jpeg", "png", "webp"])
-
-if photo is not None:
-    st.image(photo, caption="Your food", width=400)
-
-    if len(selected_allergens) == 0:
-        st.warning("Please select at least one allergen to check for.")
-    elif st.button("🔍 Scan for Allergens", type="primary"):
-        if st.session_state.call_count >= MAX_CALLS:
-            st.error("Scan limit reached. Please restart the app.")
+    for allergen, status in check_product(product, selected).items():
+        if status == "DETECTED":
+            st.error(f"🚨 **{allergen}**: listed as an allergen")
+        elif status == "MAY CONTAIN":
+            st.warning(f"⚠️ **{allergen}**: may contain traces (cross-contamination warning)")
+        elif status == "POSSIBLE":
+            st.warning(f"⚠️ **{allergen}**: possible, an ingredient name suggests it")
         else:
-            with st.spinner("Analyzing your food..."):
-                photo.seek(0)
-                img = Image.open(photo)
-                img = img.convert("RGB")
-                buffer = io.BytesIO()
-                img.save(buffer, format="JPEG")
-                image_data = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
-                file_type = "image/jpeg"
+            st.success(f"✅ **{allergen}**: not listed")
 
-                client = anthropic.Anthropic(
-                    api_key=st.secrets["ANTHROPIC_API_KEY"]
-                )
+    with st.expander("Full ingredient list"):
+        st.write(product.get("ingredients_text") or "Not available")
+    st.caption("Data from Open Food Facts, a community-edited database. Recipes change, so always check the package.")
 
-                message = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=1024,
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": file_type,
-                                    "data": image_data,
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": f"""You are a food allergen detection assistant. Analyze this food photo carefully.
 
-The user is checking for these specific allergens: {selected_allergens}
+photo_tab, barcode_tab = st.tabs(["📸 Food Photo", "🏷️ Barcode"])
 
-Please provide:
-1. **What I See** - Identify the food and its visible components
-2. **Allergen Analysis** - For each allergen the user is checking, state clearly:
-   - ✅ CLEAR - Not present
-   - ⚠️ POSSIBLE - May be present based on typical recipes
-   - 🚨 DETECTED - Likely present
-3. **Safety Recommendation** - A brief safety recommendation
+# ---------- Tab 1: food photo (Claude vision) ----------
+with photo_tab:
+    photo = st.file_uploader("Upload a food photo", type=["jpg", "jpeg", "png", "webp"], key="photo_file")
+    if photo:
+        st.image(photo, width=400)
+        if not selected:
+            st.warning("Select at least one allergen in the sidebar.")
+        elif st.button("Scan for Allergens", type="primary", key="photo_btn"):
+            if st.session_state.scan_count >= MAX_PHOTO_SCANS:
+                st.error("Scan limit reached for this session.")
+            else:
+                try:
+                    with st.spinner("Analyzing your food..."):
+                        text, flagged = scan_photo(Image.open(photo), selected,
+                                                   st.secrets["ANTHROPIC_API_KEY"])
+                    st.session_state.scan_count += 1
+                    st.subheader("Analysis Results")
+                    st.markdown(text)
+                except anthropic.APIError:
+                    st.error("The AI scan failed. Please try again in a moment.")
 
-When in doubt, flag it. This is a safety tool."""
-                            }
-                        ],
-                    }]
-                )
+# ---------- Tab 2: barcode (Open Food Facts) ----------
+with barcode_tab:
+    st.write("Upload a clear, close-up photo of the barcode, or type the number printed under it.")
+    code_photo = st.file_uploader("Barcode photo", type=["jpg", "jpeg", "png", "webp"], key="barcode_file")
+    typed = st.text_input("Or type the barcode number", key="barcode_text").strip()
 
-                st.session_state.call_count += 1
-                result = message.content[0].text
+    barcode = None
+    if typed:
+        barcode = typed
+    elif code_photo:
+        barcode = read_barcode(Image.open(code_photo))
+        if barcode:
+            st.success(f"Barcode found: {barcode}")
+        else:
+            st.warning("Couldn't read a barcode. Try a closer, sharper photo with good light, or type the number.")
 
-                st.write("---")
-                st.subheader("Analysis Results")
-                st.write(result)
+    if barcode:
+        if not barcode.isdigit():
+            st.error("Barcodes are numbers only. Check what you typed.")
+        elif not selected:
+            st.warning("Select at least one allergen in the sidebar.")
+        elif st.button("Look up product", type="primary", key="barcode_btn"):
+            with st.spinner("Looking up product..."):
+                product, status = lookup_product(barcode)
+            if status == "error":
+                st.error("Couldn't reach the product database. Check your connection and try again.")
+            elif status == "not_found":
+                st.warning("This product isn't in the database yet. Check the package label, or photograph the ingredient list in the Food Photo tab.")
+            else:
+                show_product_results(product, selected)
