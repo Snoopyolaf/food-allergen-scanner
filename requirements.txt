@@ -4,3 +4,4 @@ Pillow
 requests
 numpy
 zxing-cpp
+supabase
