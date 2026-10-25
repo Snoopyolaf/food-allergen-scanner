@@ -5,7 +5,7 @@ import io
 import anthropic
 
 MODEL = "claude-sonnet-4-6"
-MAX_SIDE = 1568  # Claude's recommended max image size; bigger photos just cost more
+MAX_SIDE = 1568  
 
 
 def _encode(image):
@@ -24,9 +24,9 @@ The user is checking for these allergens: {", ".join(selected)}
 Provide:
 1. **What I See** - Identify the food and its visible components
 2. **Allergen Analysis** - For each allergen above, state:
-   - ✅ NOT VISIBLE - no sign of it
-   - ⚠️ POSSIBLE - may be present based on typical recipes for this dish
-   - 🚨 LIKELY - likely present
+   - 🟢 NOT VISIBLE - no sign of it
+   - 🟡 POSSIBLE - may be present based on typical recipes for this dish
+   - 🔴 LIKELY - likely present
 3. **Safety Recommendation** - One or two sentences
 
 When in doubt, flag it. Hidden ingredients like sauces, oils and shared cookware cannot be seen in a photo, so never call a food safe.

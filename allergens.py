@@ -5,7 +5,7 @@ ALLERGENS = [
     "Soy", "Shellfish", "Fish", "Sesame",
 ]
 
-# How Open Food Facts labels each allergen in its data
+
 OFF_TAGS = {
     "Peanuts": ["en:peanuts"],
     "Tree Nuts": ["en:nuts"],
@@ -18,7 +18,7 @@ OFF_TAGS = {
     "Sesame": ["en:sesame-seeds"],
 }
 
-# Backup check: words in the ingredient text that suggest each allergen
+
 KEYWORDS = {
     "Peanuts": ["peanut", "groundnut"],
     "Tree Nuts": ["almond", "cashew", "walnut", "pecan", "hazelnut", "pistachio",
@@ -55,10 +55,10 @@ def check_product(product, selected):
     return results
 
 STATUS_TEXT = {
-    "DETECTED": "🚨 **{}**: listed as an allergen",
-    "MAY CONTAIN": "⚠️ **{}**: may contain traces (cross-contamination warning)",
-    "POSSIBLE": "⚠️ **{}**: possible, an ingredient name suggests it",
-    "NOT LISTED": "✅ **{}**: not listed",
+    "DETECTED": "🔴 **{}**: listed as an allergen",
+    "MAY CONTAIN": "🟠 **{}**: may contain traces (cross-contamination warning)",
+    "POSSIBLE": "🟡 **{}**: possible, an ingredient name suggests it",
+    "NOT LISTED": "🟢 **{}**: not listed",
 }
 
 

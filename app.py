@@ -14,12 +14,12 @@ from photo_scan import scan_photo
 MAX_PHOTO_SCANS = 20
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
-st.set_page_config(page_title="Food Allergen Scanner", page_icon="🔍")
-st.title("🔍 Food Allergen Scanner")
+st.set_page_config(page_title="Trace Check")
+st.title("Trace Check")
 st.write("Check a meal photo or a packaged food's barcode for allergens.")
 st.info("⚠️ AI and database results can be wrong or incomplete. Always check the package label, and ask staff when eating out.")
 
-# ---------- Session setup: one database client per browser session ----------
+
 if "db" not in st.session_state:
     st.session_state.db = make_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_ANON_KEY"])
     st.session_state.user = None
@@ -79,7 +79,7 @@ def show_product_results(product, selected):
     return results
 
 
-# ---------- Sidebar: account (optional) ----------
+
 st.sidebar.title("👤 Account")
 if st.session_state.user:
     st.sidebar.write(f"Signed in as **{st.session_state.user.email}**")
@@ -113,19 +113,19 @@ else:
         except Exception as e:
             st.sidebar.error(f"Couldn't {action}: {e}")
 
-# ---------- Sidebar: allergen profile ----------
+
 st.sidebar.divider()
-st.sidebar.title("🥜 My Allergens")
+st.sidebar.title("My Allergens")
 selected = [a for a in ALLERGENS if st.sidebar.checkbox(a, key=f"allergen_{a}")]
-if st.session_state.user and st.sidebar.button("💾 Save my allergens"):
+if st.session_state.user and st.sidebar.button("Save my allergens"):
     save_allergens(db, st.session_state.user.id, selected)
     st.sidebar.success("Saved!")
 st.sidebar.divider()
 st.sidebar.caption(f"Photo scans used: {st.session_state.scan_count}/{MAX_PHOTO_SCANS}")
 
-photo_tab, barcode_tab, history_tab = st.tabs(["📸 Food Photo", "🏷️ Barcode", "🕘 History"])
+photo_tab, barcode_tab, history_tab = st.tabs(["Food Photo", "Barcode", "History"])
 
-# ---------- Tab 1: food photo (Claude vision) ----------
+
 with photo_tab:
     photo = st.file_uploader("Upload a food photo", type=["jpg", "jpeg", "png", "webp"], key="photo_file")
     if photo:
@@ -147,7 +147,7 @@ with photo_tab:
                 except anthropic.APIError:
                     st.error("The AI scan failed. Please try again in a moment.")
 
-# ---------- Tab 2: barcode (Open Food Facts) ----------
+
 with barcode_tab:
     st.write("Upload a clear, close-up photo of the barcode, or type the number printed under it.")
     code_photo = st.file_uploader("Barcode photo", type=["jpg", "jpeg", "png", "webp"], key="barcode_file")
@@ -186,7 +186,7 @@ with barcode_tab:
                         result=summary_text(results),
                     )
 
-# ---------- Tab 3: scan history ----------
+
 with history_tab:
     if not st.session_state.user:
         st.info("Sign in from the sidebar to save and view your scan history.")
@@ -209,6 +209,6 @@ with history_tab:
             flags = ", ".join(scan["flagged_allergens"]) or "No allergens flagged"
             with st.expander(f"{icon} {title} · {when} · {flags}"):
                 st.markdown(scan["result"])
-                if st.button("🗑️ Delete", key=f"del_{scan['id']}"):
+                if st.button("Delete", key=f"del_{scan['id']}"):
                     delete_scan(db, scan["id"])
                     st.rerun()

@@ -5,7 +5,7 @@ import zxingcpp
 
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
 FIELDS = "product_name,brands,ingredients_text,allergens_tags,traces_tags"
-# Open Food Facts asks every app to identify itself
+
 HEADERS = {"User-Agent": "FoodAllergenScanner/1.0 (github.com/Snoopyolaf/food-allergen-scanner)"}
 
 
