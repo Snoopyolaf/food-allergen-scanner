@@ -1,26 +1,33 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import anthropic
 import streamlit as st
 from PIL import Image
 
-from allergens import ALLERGENS, check_product
+from allergens import ALLERGENS, STATUS_TEXT, check_product, flagged_from, summary_text
 from barcode_scan import lookup_product, read_barcode
+from db import (delete_scan, load_allergens, load_scans, make_client,
+                save_allergens, save_scan, sign_in, sign_out, sign_up)
 from photo_scan import scan_photo
-from db import load_allergens, make_client, save_allergens, sign_in, sign_out, sign_up
 
 MAX_PHOTO_SCANS = 20
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 st.set_page_config(page_title="Food Allergen Scanner", page_icon="🔍")
 st.title("🔍 Food Allergen Scanner")
 st.write("Check a meal photo or a packaged food's barcode for allergens.")
 st.info("⚠️ AI and database results can be wrong or incomplete. Always check the package label, and ask staff when eating out.")
 
-# ---------- Database client: one per browser session ----------
+# ---------- Session setup: one database client per browser session ----------
 if "db" not in st.session_state:
     st.session_state.db = make_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_ANON_KEY"])
     st.session_state.user = None
 db = st.session_state.db
 
-# Each allergen checkbox remembers its state under a key like "allergen_Peanuts"
+if "scan_count" not in st.session_state:
+    st.session_state.scan_count = 0
+
 for a in ALLERGENS:
     st.session_state.setdefault(f"allergen_{a}", True)
 
@@ -34,6 +41,44 @@ def current_selection():
     return [a for a in ALLERGENS if st.session_state[f"allergen_{a}"]]
 
 
+def save_to_history(**scan):
+    """Save a scan if signed in. A failed save never breaks the scan itself."""
+    if not st.session_state.user:
+        st.caption("Sign in to save scans to your history.")
+        return
+    try:
+        save_scan(db, **scan)
+        st.caption("✓ Saved to your history.")
+    except Exception:
+        st.caption("⚠️ Couldn't save this scan to your history.")
+
+
+def show_product_results(product, selected):
+    """Show a barcode product's allergen check. Returns the results, or None if there's no data."""
+    name = product.get("product_name") or "Unknown product"
+    brand = product.get("brands")
+    st.subheader(f"{name} ({brand})" if brand else name)
+
+    if not (product.get("ingredients_text") or product.get("allergens_tags")):
+        st.warning("This product has no ingredient or allergen data in the database. Check the package label directly.")
+        return None
+
+    results = check_product(product, selected)
+    for allergen, status in results.items():
+        message = STATUS_TEXT[status].format(allergen)
+        if status == "DETECTED":
+            st.error(message)
+        elif status == "NOT LISTED":
+            st.success(message)
+        else:
+            st.warning(message)
+
+    with st.expander("Full ingredient list"):
+        st.write(product.get("ingredients_text") or "Not available")
+    st.caption("Data from Open Food Facts, a community-edited database. Recipes change, so always check the package.")
+    return results
+
+
 # ---------- Sidebar: account (optional) ----------
 st.sidebar.title("👤 Account")
 if st.session_state.user:
@@ -44,7 +89,7 @@ if st.session_state.user:
         set_checkboxes(ALLERGENS)
         st.rerun()
 else:
-    st.sidebar.caption("Optional. Sign in to save your allergen profile. Everything works without an account.")
+    st.sidebar.caption("Optional. Sign in to save your allergen profile and scan history. Everything else works without an account.")
     with st.sidebar.form("auth_form"):
         email = st.text_input("Email")
         password = st.text_input("Password (6+ characters)", type="password")
@@ -75,38 +120,10 @@ selected = [a for a in ALLERGENS if st.sidebar.checkbox(a, key=f"allergen_{a}")]
 if st.session_state.user and st.sidebar.button("💾 Save my allergens"):
     save_allergens(db, st.session_state.user.id, selected)
     st.sidebar.success("Saved!")
-
-if "scan_count" not in st.session_state:
-    st.session_state.scan_count = 0
 st.sidebar.divider()
 st.sidebar.caption(f"Photo scans used: {st.session_state.scan_count}/{MAX_PHOTO_SCANS}")
 
-
-def show_product_results(product, selected):
-    name = product.get("product_name") or "Unknown product"
-    brand = product.get("brands")
-    st.subheader(f"{name} ({brand})" if brand else name)
-
-    if not (product.get("ingredients_text") or product.get("allergens_tags")):
-        st.warning("This product has no ingredient or allergen data in the database. Check the package label directly.")
-        return
-
-    for allergen, status in check_product(product, selected).items():
-        if status == "DETECTED":
-            st.error(f"🚨 **{allergen}**: listed as an allergen")
-        elif status == "MAY CONTAIN":
-            st.warning(f"⚠️ **{allergen}**: may contain traces (cross-contamination warning)")
-        elif status == "POSSIBLE":
-            st.warning(f"⚠️ **{allergen}**: possible, an ingredient name suggests it")
-        else:
-            st.success(f"✅ **{allergen}**: not listed")
-
-    with st.expander("Full ingredient list"):
-        st.write(product.get("ingredients_text") or "Not available")
-    st.caption("Data from Open Food Facts, a community-edited database. Recipes change, so always check the package.")
-
-
-photo_tab, barcode_tab = st.tabs(["📸 Food Photo", "🏷️ Barcode"])
+photo_tab, barcode_tab, history_tab = st.tabs(["📸 Food Photo", "🏷️ Barcode", "🕘 History"])
 
 # ---------- Tab 1: food photo (Claude vision) ----------
 with photo_tab:
@@ -126,6 +143,7 @@ with photo_tab:
                     st.session_state.scan_count += 1
                     st.subheader("Analysis Results")
                     st.markdown(text)
+                    save_to_history(scan_type="photo", result=text, flagged=flagged)
                 except anthropic.APIError:
                     st.error("The AI scan failed. Please try again in a moment.")
 
@@ -158,4 +176,39 @@ with barcode_tab:
             elif status == "not_found":
                 st.warning("This product isn't in the database yet. Check the package label, or photograph the ingredient list in the Food Photo tab.")
             else:
-                show_product_results(product, selected)
+                results = show_product_results(product, selected)
+                if results:
+                    save_to_history(
+                        scan_type="barcode",
+                        product_name=product.get("product_name"),
+                        barcode=barcode,
+                        flagged=flagged_from(results),
+                        result=summary_text(results),
+                    )
+
+# ---------- Tab 3: scan history ----------
+with history_tab:
+    if not st.session_state.user:
+        st.info("Sign in from the sidebar to save and view your scan history.")
+    else:
+        try:
+            scans = load_scans(db)
+        except Exception:
+            scans = None
+            st.error("Couldn't load your history. Try again in a moment.")
+
+        if scans == []:
+            st.write("No scans yet. Your photo and barcode scans will show up here.")
+
+        for scan in scans or []:
+            when = datetime.fromisoformat(scan["created_at"]).astimezone(LOCAL_TZ).strftime("%b %d, %I:%M %p")
+            if scan["scan_type"] == "photo":
+                icon, title = "📸", "Food photo"
+            else:
+                icon, title = "🏷️", scan["product_name"] or f"Barcode {scan['barcode']}"
+            flags = ", ".join(scan["flagged_allergens"]) or "No allergens flagged"
+            with st.expander(f"{icon} {title} · {when} · {flags}"):
+                st.markdown(scan["result"])
+                if st.button("🗑️ Delete", key=f"del_{scan['id']}"):
+                    delete_scan(db, scan["id"])
+                    st.rerun()

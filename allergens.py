@@ -53,3 +53,20 @@ def check_product(product, selected):
         else:
             results[allergen] = "NOT LISTED"
     return results
+
+STATUS_TEXT = {
+    "DETECTED": "🚨 **{}**: listed as an allergen",
+    "MAY CONTAIN": "⚠️ **{}**: may contain traces (cross-contamination warning)",
+    "POSSIBLE": "⚠️ **{}**: possible, an ingredient name suggests it",
+    "NOT LISTED": "✅ **{}**: not listed",
+}
+
+
+def flagged_from(results):
+    """Allergens that got any warning."""
+    return [a for a, status in results.items() if status != "NOT LISTED"]
+
+
+def summary_text(results):
+    """One line per allergen, for saving to history."""
+    return "\n\n".join(STATUS_TEXT[status].format(a) for a, status in results.items())

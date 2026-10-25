@@ -27,3 +27,29 @@ def load_allergens(client, user_id):
 def save_allergens(client, user_id, allergens):
     """Create or update the user's allergen profile."""
     client.table("profiles").upsert({"id": user_id, "allergens": allergens}).execute()
+
+def save_scan(client, scan_type, result, flagged, product_name=None, barcode=None):
+    """Save one scan. user_id is filled in by the database from the logged-in user."""
+    client.table("scans").insert({
+        "scan_type": scan_type,
+        "result": result,
+        "flagged_allergens": flagged,
+        "product_name": product_name,
+        "barcode": barcode,
+    }).execute()
+
+
+def load_scans(client, limit=50):
+    """Most recent scans first. Row level security means this only returns the user's own scans."""
+    return (
+        client.table("scans")
+        .select("id, scan_type, product_name, barcode, flagged_allergens, result, created_at")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+    )
+
+
+def delete_scan(client, scan_id):
+    client.table("scans").delete().eq("id", scan_id).execute()
