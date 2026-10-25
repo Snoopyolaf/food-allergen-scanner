@@ -17,6 +17,10 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 st.set_page_config(page_title="Trace Check")
 st.title("Trace Check")
 st.write("Check a meal photo or a packaged food's barcode for allergens.")
+step1, step2, step3 = st.columns(3)
+step1.markdown("**1. Pick your allergens**  \nIn the sidebar")
+step2.markdown("**2. Scan**  \nA meal photo or a barcode")
+step3.markdown("**3. Check results**  \nMost serious first")
 st.info("⚠️ AI and database results can be wrong or incomplete. Always check the package label, and ask staff when eating out.")
 
 
@@ -212,3 +216,9 @@ with history_tab:
                 if st.button("Delete", key=f"del_{scan['id']}"):
                     delete_scan(db, scan["id"])
                     st.rerun()
+st.divider()
+st.caption(
+    "Built by a student with life-threatening nut allergies. "
+    "TraceCheck flags possible allergens; it can't confirm a food is safe. "
+    "Ingredient data: Open Food Facts · Photo analysis: Claude by Anthropic"
+)
